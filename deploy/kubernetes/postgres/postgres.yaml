@@ -1,0 +1,116 @@
+# PostgreSQL deployment for the OpenClaw control plane.
+#
+# For production, consider using a managed PostgreSQL service
+# (e.g., AWS RDS, GCP Cloud SQL, Azure Database for PostgreSQL)
+# instead of this in-cluster deployment.
+#
+# This manifest is suitable for development and small-scale deployments.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: openclaw-postgres
+  namespace: openclaw
+  labels:
+    app: openclaw-postgres
+    component: database
+spec:
+  serviceName: openclaw-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: openclaw-postgres
+  template:
+    metadata:
+      labels:
+        app: openclaw-postgres
+        component: database
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-bookworm
+          ports:
+            - name: postgres
+              containerPort: 5432
+              protocol: TCP
+          env:
+            - name: POSTGRES_DB
+              value: openclaw_control_plane
+            - name: POSTGRES_USER
+              value: openclaw
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-postgres-secrets
+                  key: postgres-password
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - openclaw
+                - -d
+                - openclaw_control_plane
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - openclaw
+                - -d
+                - openclaw_control_plane
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openclaw-postgres
+  namespace: openclaw
+  labels:
+    app: openclaw-postgres
+spec:
+  type: ClusterIP
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+      protocol: TCP
+  selector:
+    app: openclaw-postgres
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: openclaw-postgres-secrets
+  namespace: openclaw
+  labels:
+    app: openclaw-postgres
+type: Opaque
+stringData:
+  # Generate with: openssl rand -hex 16
+  postgres-password: "CHANGE_ME"

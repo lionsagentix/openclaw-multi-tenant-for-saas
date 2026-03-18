@@ -1,0 +1,219 @@
+# Template for per-tenant OpenClaw gateway resources.
+# The control plane dynamically creates these resources for each tenant,
+# substituting TENANT_ID, TENANT_SLUG, and resource limits from the plan tier.
+#
+# This file serves as documentation and a reference template.
+# The actual resources are created programmatically by the orchestrator.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openclaw-gw-${TENANT_SLUG}
+  namespace: openclaw
+  labels:
+    app: openclaw-gateway
+    component: tenant-gateway
+    tenant-id: "${TENANT_ID}"
+    tenant-slug: "${TENANT_SLUG}"
+    tenant-plan: "${TENANT_PLAN}"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # Single-replica; no rolling update needed
+  selector:
+    matchLabels:
+      app: openclaw-gateway
+      tenant-id: "${TENANT_ID}"
+  template:
+    metadata:
+      labels:
+        app: openclaw-gateway
+        component: tenant-gateway
+        tenant-id: "${TENANT_ID}"
+        tenant-slug: "${TENANT_SLUG}"
+        tenant-plan: "${TENANT_PLAN}"
+    spec:
+      containers:
+        - name: gateway
+          image: openclaw:latest
+          imagePullPolicy: IfNotPresent
+          args:
+            - "node"
+            - "openclaw.mjs"
+            - "gateway"
+            - "run"
+            - "--bind"
+            - "lan"
+            - "--port"
+            - "18789"
+          ports:
+            - name: gateway
+              containerPort: 18789
+              protocol: TCP
+          env:
+            - name: HOME
+              value: /home/node
+            - name: OPENCLAW_GATEWAY_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-tenant-${TENANT_SLUG}-secrets
+                  key: gateway-token
+            # Platform AI keys (only present when credentialMode = platform | hybrid)
+            - name: OPENCLAW_PLATFORM_OPENAI_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-tenant-${TENANT_SLUG}-secrets
+                  key: platform-openai-key
+                  optional: true
+            - name: OPENCLAW_PLATFORM_ANTHROPIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-tenant-${TENANT_SLUG}-secrets
+                  key: platform-anthropic-key
+                  optional: true
+          # Resource limits are set dynamically based on tenant plan tier
+          # These are starter-tier defaults
+          resources:
+            requests:
+              cpu: "${RESOURCE_CPU_REQUEST}"      # e.g., 500m
+              memory: "${RESOURCE_MEMORY_REQUEST}" # e.g., 256Mi
+            limits:
+              cpu: "${RESOURCE_CPU_LIMIT}"         # e.g., 1000m
+              memory: "${RESOURCE_MEMORY_LIMIT}"   # e.g., 512Mi
+          volumeMounts:
+            - name: openclaw-data
+              mountPath: /home/node/.openclaw
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: gateway
+            initialDelaySeconds: 15
+            periodSeconds: 180
+            timeoutSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: gateway
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: openclaw-data
+          persistentVolumeClaim:
+            claimName: openclaw-tenant-${TENANT_SLUG}-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: openclaw-tenant-${TENANT_SLUG}-data
+  namespace: openclaw
+  labels:
+    app: openclaw-gateway
+    tenant-id: "${TENANT_ID}"
+    tenant-slug: "${TENANT_SLUG}"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: "${STORAGE_SIZE}"  # e.g., 1Gi, 5Gi, 20Gi based on plan
+  # storageClassName: default  # Use cluster default or specify explicitly
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openclaw-gw-${TENANT_SLUG}
+  namespace: openclaw
+  labels:
+    app: openclaw-gateway
+    tenant-id: "${TENANT_ID}"
+    tenant-slug: "${TENANT_SLUG}"
+spec:
+  type: ClusterIP
+  ports:
+    - name: gateway
+      port: 18789
+      targetPort: gateway
+      protocol: TCP
+  selector:
+    app: openclaw-gateway
+    tenant-id: "${TENANT_ID}"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: openclaw-tenant-${TENANT_SLUG}-secrets
+  namespace: openclaw
+  labels:
+    app: openclaw-gateway
+    tenant-id: "${TENANT_ID}"
+    tenant-slug: "${TENANT_SLUG}"
+type: Opaque
+stringData:
+  gateway-token: "${GATEWAY_TOKEN}"
+  # Platform AI keys (empty if tenant uses BYOK only)
+  platform-openai-key: ""
+  platform-anthropic-key: ""
+---
+# Network policy: tenant gateway can only reach AI provider APIs and the control plane.
+# Blocks all inter-tenant traffic.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: openclaw-tenant-${TENANT_SLUG}-netpol
+  namespace: openclaw
+  labels:
+    app: openclaw-gateway
+    tenant-id: "${TENANT_ID}"
+    tenant-slug: "${TENANT_SLUG}"
+spec:
+  podSelector:
+    matchLabels:
+      app: openclaw-gateway
+      tenant-id: "${TENANT_ID}"
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow inbound only from the control plane and ingress controller
+    - from:
+        - podSelector:
+            matchLabels:
+              app: openclaw-control-plane
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+  egress:
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow HTTPS (for AI provider APIs, webhook delivery, etc.)
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8       # Block cluster-internal IPs
+              - 172.16.0.0/12    # Block private ranges
+              - 192.168.0.0/16   # Block private ranges
+      ports:
+        - protocol: TCP
+          port: 443
+    # Allow communication with control plane
+    - to:
+        - podSelector:
+            matchLabels:
+              app: openclaw-control-plane
+      ports:
+        - protocol: TCP
+          port: 8080

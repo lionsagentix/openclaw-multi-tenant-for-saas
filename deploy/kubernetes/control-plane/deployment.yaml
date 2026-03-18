@@ -1,0 +1,167 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openclaw-control-plane
+  namespace: openclaw
+  labels:
+    app: openclaw-control-plane
+    component: control-plane
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: openclaw-control-plane
+  template:
+    metadata:
+      labels:
+        app: openclaw-control-plane
+        component: control-plane
+    spec:
+      serviceAccountName: openclaw-control-plane
+      containers:
+        - name: control-plane
+          image: openclaw-control-plane:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-control-plane-secrets
+                  key: database-url
+            - name: CONTROL_PLANE_ADMIN_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-control-plane-secrets
+                  key: admin-api-key
+            - name: BILLING_PROVIDER
+              valueFrom:
+                configMapKeyRef:
+                  name: openclaw-control-plane-config
+                  key: billing-provider
+            - name: BILLING_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-control-plane-secrets
+                  key: billing-api-key
+            - name: BILLING_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-control-plane-secrets
+                  key: billing-webhook-secret
+            # Platform AI keys (injected into tenant containers when credentialMode=platform)
+            - name: OPENCLAW_PLATFORM_OPENAI_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-platform-ai-keys
+                  key: openai-api-key
+                  optional: true
+            - name: OPENCLAW_PLATFORM_ANTHROPIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-platform-ai-keys
+                  key: anthropic-api-key
+                  optional: true
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: 2000m
+              memory: 1Gi
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openclaw-control-plane
+  namespace: openclaw
+  labels:
+    app: openclaw-control-plane
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+  selector:
+    app: openclaw-control-plane
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: openclaw-control-plane
+  namespace: openclaw
+  labels:
+    app: openclaw-control-plane
+---
+# The control plane needs permissions to manage tenant pods, services, PVCs, and network policies
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: openclaw-control-plane
+  namespace: openclaw
+rules:
+  # Manage tenant gateway deployments
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Manage tenant services
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Manage tenant PVCs for data isolation
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Manage tenant network policies for isolation
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Read pods for health monitoring
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+  # Manage tenant config and secrets
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: openclaw-control-plane
+  namespace: openclaw
+subjects:
+  - kind: ServiceAccount
+    name: openclaw-control-plane
+    namespace: openclaw
+roleRef:
+  kind: Role
+  name: openclaw-control-plane
+  apiGroup: rbac.authorization.k8s.io

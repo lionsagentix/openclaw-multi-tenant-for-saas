@@ -1,0 +1,82 @@
+# Ingress configuration for OpenClaw Multi-Tenant platform.
+#
+# Routes traffic to:
+# - Control plane API: api.{PLATFORM_DOMAIN}
+# - Tenant gateways: {tenant-slug}.{PLATFORM_DOMAIN}
+#
+# Requires an nginx-ingress controller (or Traefik) installed in the cluster.
+# Replace PLATFORM_DOMAIN with your actual domain (e.g., openclaw.mark8place.com).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: openclaw-control-plane-ingress
+  namespace: openclaw
+  labels:
+    app: openclaw-control-plane
+  annotations:
+    # TLS via cert-manager (adjust issuer as needed)
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    # Rate limiting for control plane API
+    nginx.ingress.kubernetes.io/limit-rps: "30"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "5"
+    # Request size limit (for BYOK key uploads, etc.)
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - "api.${PLATFORM_DOMAIN}"
+      secretName: openclaw-control-plane-tls
+  rules:
+    # Control plane API
+    - host: "api.${PLATFORM_DOMAIN}"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: openclaw-control-plane
+                port:
+                  number: 8080
+---
+# Wildcard ingress for tenant gateways.
+# Each tenant gets a subdomain: {tenant-slug}.{PLATFORM_DOMAIN}
+#
+# Note: For wildcard TLS, you need a wildcard certificate.
+# cert-manager can issue these with DNS01 challenge solvers.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: openclaw-tenant-wildcard-ingress
+  namespace: openclaw
+  labels:
+    app: openclaw-gateway
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    # WebSocket support for gateway connections
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/websocket-services: "true"
+    # Larger body size for file uploads through gateway
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - "*.${PLATFORM_DOMAIN}"
+      secretName: openclaw-tenant-wildcard-tls
+  # Individual tenant rules are added dynamically by the control plane's
+  # proxy-router module. The template below shows the pattern:
+  #
+  # rules:
+  #   - host: "my-tenant.${PLATFORM_DOMAIN}"
+  #     http:
+  #       paths:
+  #         - path: /
+  #           pathType: Prefix
+  #           backend:
+  #             service:
+  #               name: openclaw-gw-my-tenant
+  #               port:
+  #                 number: 18789

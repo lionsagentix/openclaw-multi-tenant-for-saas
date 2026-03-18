@@ -1,0 +1,87 @@
+# syntax=docker/dockerfile:1.7
+#
+# OpenClaw Multi-Tenant Control Plane
+# Manages tenant gateway lifecycle, billing, usage collection, and quota enforcement.
+#
+# Build:
+#   docker build -f Dockerfile.control-plane -t openclaw-control-plane .
+#
+# Run:
+#   docker run -d \
+#     -p 8080:8080 \
+#     -e DATABASE_URL=postgres://user:pass@host:5432/openclaw_control_plane \
+#     -e CONTROL_PLANE_ADMIN_KEY=your-admin-key \
+#     openclaw-control-plane
+#
+# The control plane does NOT run an OpenClaw gateway. It orchestrates
+# per-tenant gateway containers via the Kubernetes or Docker API.
+
+ARG OPENCLAW_NODE_BOOKWORM_IMAGE="node:24-bookworm@sha256:3a09aa6354567619221ef6c45a5051b671f953f0a1924d1f819ffb236e520e6b"
+
+# ── Stage 1: Build ──────────────────────────────────────────────
+FROM ${OPENCLAW_NODE_BOOKWORM_IMAGE} AS build
+
+RUN corepack enable
+
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY ui/package.json ./ui/package.json
+COPY patches ./patches
+
+# Install all dependencies (including control plane deps: pg, @kubernetes/client-node, dockerode)
+RUN --mount=type=cache,id=openclaw-cp-pnpm-store,target=/root/.local/share/pnpm/store,sharing=locked \
+    NODE_OPTIONS=--max-old-space-size=2048 pnpm install --frozen-lockfile
+
+COPY . .
+
+RUN pnpm build:docker
+
+# ── Stage 2: Runtime assets ────────────────────────────────────
+FROM build AS runtime-assets
+RUN CI=true pnpm prune --prod && \
+    find dist -type f \( -name '*.d.ts' -o -name '*.d.mts' -o -name '*.d.cts' -o -name '*.map' \) -delete
+
+# ── Stage 3: Runtime ────────────────────────────────────────────
+FROM ${OPENCLAW_NODE_BOOKWORM_IMAGE}
+
+LABEL org.opencontainers.image.source="https://github.com/lionsagentix/openclaw-multi-tenant-for-saas" \
+  org.opencontainers.image.title="OpenClaw Multi-Tenant Control Plane" \
+  org.opencontainers.image.description="Control plane for orchestrating multi-tenant OpenClaw gateway instances" \
+  org.opencontainers.image.licenses="MIT"
+
+WORKDIR /app
+
+# Install system utilities
+RUN --mount=type=cache,id=openclaw-cp-apt-cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=openclaw-cp-apt-lists,target=/var/lib/apt,sharing=locked \
+    apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get upgrade -y --no-install-recommends && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      procps hostname curl openssl ca-certificates
+
+RUN chown node:node /app
+
+COPY --from=runtime-assets --chown=node:node /app/dist ./dist
+COPY --from=runtime-assets --chown=node:node /app/node_modules ./node_modules
+COPY --from=runtime-assets --chown=node:node /app/package.json .
+COPY --from=runtime-assets --chown=node:node /app/openclaw.mjs .
+
+# Expose the CLI binary
+RUN ln -sf /app/openclaw.mjs /usr/local/bin/openclaw \
+ && chmod 755 /app/openclaw.mjs
+
+ENV NODE_ENV=production
+
+# Security hardening: non-root
+USER node
+
+# Control plane HTTP port
+EXPOSE 8080
+
+# Health check for the control plane API
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:8080/healthz').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+# Start the control plane server
+CMD ["node", "openclaw.mjs", "control-plane", "run", "--port", "8080"]

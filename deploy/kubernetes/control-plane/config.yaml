@@ -1,0 +1,65 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openclaw-control-plane-config
+  namespace: openclaw
+  labels:
+    app: openclaw-control-plane
+data:
+  # Billing provider: "stripe" | "paddle" | "lemonsqueezy"
+  billing-provider: "stripe"
+
+  # Tenant gateway Docker image
+  tenant-gateway-image: "openclaw:latest"
+
+  # Warm pool configuration
+  warm-pool-min-size: "10"
+  warm-pool-max-size: "50"
+
+  # Hibernation defaults (can be overridden per plan)
+  hibernation-idle-threshold-minutes: "30"
+  hibernation-hibernate-after-minutes: "120"
+
+  # Usage collection interval (seconds)
+  usage-collection-interval: "300"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: openclaw-control-plane-secrets
+  namespace: openclaw
+  labels:
+    app: openclaw-control-plane
+type: Opaque
+stringData:
+  # PostgreSQL connection string
+  # Replace with your actual database URL
+  database-url: "postgres://openclaw:CHANGE_ME@openclaw-postgres:5432/openclaw_control_plane"
+
+  # Control plane admin API key (generate with: openssl rand -hex 32)
+  admin-api-key: "CHANGE_ME"
+
+  # Billing provider API key and webhook secret
+  billing-api-key: "CHANGE_ME"
+  billing-webhook-secret: "CHANGE_ME"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: openclaw-platform-ai-keys
+  namespace: openclaw
+  labels:
+    app: openclaw-control-plane
+type: Opaque
+stringData:
+  # Platform-provided AI API keys (used when tenant credentialMode = "platform" or "hybrid")
+  # Leave empty if all tenants use BYOK
+  openai-api-key: ""
+  anthropic-api-key: ""
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openclaw
+  labels:
+    app: openclaw
