@@ -534,6 +534,8 @@ importers:
 
   extensions/synthetic: {}
 
+  extensions/tavily: {}
+
   extensions/telegram:
     dependencies:
       '@grammyjs/runner':
