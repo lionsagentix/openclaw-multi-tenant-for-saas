@@ -18,7 +18,7 @@ metadata:
 spec:
   replicas: 1
   strategy:
-    type: Recreate  # Single-replica; no rolling update needed
+    type: Recreate # Single-replica; no rolling update needed
   selector:
     matchLabels:
       app: openclaw-gateway
@@ -74,11 +74,11 @@ spec:
           # These are starter-tier defaults
           resources:
             requests:
-              cpu: "${RESOURCE_CPU_REQUEST}"      # e.g., 500m
+              cpu: "${RESOURCE_CPU_REQUEST}" # e.g., 500m
               memory: "${RESOURCE_MEMORY_REQUEST}" # e.g., 256Mi
             limits:
-              cpu: "${RESOURCE_CPU_LIMIT}"         # e.g., 1000m
-              memory: "${RESOURCE_MEMORY_LIMIT}"   # e.g., 512Mi
+              cpu: "${RESOURCE_CPU_LIMIT}" # e.g., 1000m
+              memory: "${RESOURCE_MEMORY_LIMIT}" # e.g., 512Mi
           volumeMounts:
             - name: openclaw-data
               mountPath: /home/node/.openclaw
@@ -122,7 +122,7 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: "${STORAGE_SIZE}"  # e.g., 1Gi, 5Gi, 20Gi based on plan
+      storage: "${STORAGE_SIZE}" # e.g., 1Gi, 5Gi, 20Gi based on plan
   # storageClassName: default  # Use cluster default or specify explicitly
 ---
 apiVersion: v1
@@ -203,9 +203,9 @@ spec:
         - ipBlock:
             cidr: 0.0.0.0/0
             except:
-              - 10.0.0.0/8       # Block cluster-internal IPs
-              - 172.16.0.0/12    # Block private ranges
-              - 192.168.0.0/16   # Block private ranges
+              - 10.0.0.0/8 # Block cluster-internal IPs
+              - 172.16.0.0/12 # Block private ranges
+              - 192.168.0.0/16 # Block private ranges
       ports:
         - protocol: TCP
           port: 443

@@ -245,7 +245,7 @@ export function createKubernetesRuntime(config: KubernetesRuntimeConfig): Contai
             policyTypes: ["Ingress", "Egress"],
             ingress: [
               {
-                from: [{ podSelector: { matchLabels: { app: "openclaw-control-plane" } } }],
+                _from: [{ podSelector: { matchLabels: { app: "openclaw-control-plane" } } }],
               },
             ],
             egress: [

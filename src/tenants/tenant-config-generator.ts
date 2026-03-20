@@ -16,8 +16,11 @@
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import type { Tenant, TenantCredentialMode } from "./types.js";
 
-/** Environment variable names for platform-provided AI keys. */
-const PLATFORM_AI_ENV_VARS = {
+/**
+ * Environment variable names for platform-provided AI keys.
+ * Referenced by container runtimes (Docker/K8s) when injecting env vars into tenant pods.
+ */
+export const PLATFORM_AI_ENV_VARS = {
   openai: "OPENCLAW_PLATFORM_OPENAI_KEY",
   anthropic: "OPENCLAW_PLATFORM_ANTHROPIC_KEY",
 } as const;
@@ -102,23 +105,17 @@ function buildAuthConfig(credentialMode: TenantCredentialMode): OpenClawConfig["
 
     case "platform":
       // Platform-provided keys as the primary (and only) AI credentials.
+      // Actual API keys are injected via env vars and stored in auth-profiles.json
+      // on the tenant's PVC at container startup.
       return {
         profiles: {
           "platform-openai": {
             provider: "openai",
-            key: {
-              source: "env",
-              provider: "default",
-              id: PLATFORM_AI_ENV_VARS.openai,
-            },
+            mode: "api_key" as const,
           },
           "platform-anthropic": {
             provider: "anthropic",
-            key: {
-              source: "env",
-              provider: "default",
-              id: PLATFORM_AI_ENV_VARS.anthropic,
-            },
+            mode: "api_key" as const,
           },
         },
       };
@@ -127,23 +124,17 @@ function buildAuthConfig(credentialMode: TenantCredentialMode): OpenClawConfig["
       // Platform keys injected as fallback. Tenant's own keys (added later via API)
       // will be prioritized by the auth profile ordering system.
       // The `order` field ensures tenant keys come first when they exist.
+      // Actual API keys are injected via env vars and stored in auth-profiles.json
+      // on the tenant's PVC at container startup.
       return {
         profiles: {
           "platform-openai": {
             provider: "openai",
-            key: {
-              source: "env",
-              provider: "default",
-              id: PLATFORM_AI_ENV_VARS.openai,
-            },
+            mode: "api_key" as const,
           },
           "platform-anthropic": {
             provider: "anthropic",
-            key: {
-              source: "env",
-              provider: "default",
-              id: PLATFORM_AI_ENV_VARS.anthropic,
-            },
+            mode: "api_key" as const,
           },
         },
       };

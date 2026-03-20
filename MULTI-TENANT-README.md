@@ -66,12 +66,12 @@ Rather than retrofitting tenant isolation into the gateway internals, this fork 
 
 All additions are in new modules -- no existing OpenClaw files are modified.
 
-| Module | Purpose |
-|--------|---------|
-| `src/tenants/` | Tenant management -- CRUD, provisioning, lifecycle, config generation |
+| Module               | Purpose                                                                                              |
+| -------------------- | ---------------------------------------------------------------------------------------------------- |
+| `src/tenants/`       | Tenant management -- CRUD, provisioning, lifecycle, config generation                                |
 | `src/control-plane/` | Gateway orchestrator, health monitoring, usage collection, quota enforcement, hibernation, warm pool |
-| `src/billing/` | Payment-provider-agnostic billing -- subscriptions, usage metering, webhooks, invoicing |
-| `deploy/kubernetes/` | Kubernetes manifests for control plane, tenant templates, ingress, and database |
+| `src/billing/`       | Payment-provider-agnostic billing -- subscriptions, usage metering, webhooks, invoicing              |
+| `deploy/kubernetes/` | Kubernetes manifests for control plane, tenant templates, ingress, and database                      |
 
 ### New Capabilities
 
@@ -90,12 +90,12 @@ All additions are in new modules -- no existing OpenClaw files are modified.
 
 Each tenant gateway is provisioned with hardened configuration following OpenClaw's multi-user remediation guidance:
 
-| Setting | Value | Purpose |
-|---------|-------|---------|
-| `agents.defaults.sandbox.mode` | `"all"` | Full execution sandboxing |
-| `tools.fs.workspaceOnly` | `true` | Filesystem restricted to workspace |
-| `tools.exec.applyPatch.workspaceOnly` | `true` | Patch tool restricted to workspace |
-| `gateway.auth.mode` | `"token"` | Token-based gateway authentication |
+| Setting                               | Value     | Purpose                            |
+| ------------------------------------- | --------- | ---------------------------------- |
+| `agents.defaults.sandbox.mode`        | `"all"`   | Full execution sandboxing          |
+| `tools.fs.workspaceOnly`              | `true`    | Filesystem restricted to workspace |
+| `tools.exec.applyPatch.workspaceOnly` | `true`    | Patch tool restricted to workspace |
+| `gateway.auth.mode`                   | `"token"` | Token-based gateway authentication |
 
 Additional container-level hardening:
 
@@ -136,6 +136,7 @@ interface BillingProvider {
 ```
 
 **Included implementations:**
+
 - Stripe (full implementation)
 - Paddle (stub, interface-compliant)
 - LemonSqueezy (stub, interface-compliant)
@@ -146,11 +147,11 @@ interface BillingProvider {
 
 Each tenant can be configured with one of three credential modes:
 
-| Mode | Description | Metered? |
-|------|-------------|----------|
-| **BYOK** | Tenant provides their own AI provider API keys | No -- tenant pays provider directly |
-| **Platform** | Platform operator provides shared AI keys | Yes -- usage billed to tenant |
-| **Hybrid** | Tenant keys with platform fallback | Only platform key usage is metered |
+| Mode         | Description                                    | Metered?                            |
+| ------------ | ---------------------------------------------- | ----------------------------------- |
+| **BYOK**     | Tenant provides their own AI provider API keys | No -- tenant pays provider directly |
+| **Platform** | Platform operator provides shared AI keys      | Yes -- usage billed to tenant       |
+| **Hybrid**   | Tenant keys with platform fallback             | Only platform key usage is metered  |
 
 In hybrid mode, the existing OpenClaw auth profile round-robin and cooldown system handles automatic failover from tenant keys to platform keys.
 
@@ -160,14 +161,15 @@ In hybrid mode, the existing OpenClaw auth profile round-robin and cooldown syst
 
 Designed for 500+ tenants with resource efficiency:
 
-| Metric | Value |
-|--------|-------|
-| Per-tenant message latency | Same as single-tenant (~50-200ms) |
-| Cold start / wake from hibernation | <1 second (warm pool) |
-| Memory per active tenant | ~150-300 MB |
-| Memory per hibernated tenant | ~0 MB (container stopped) |
+| Metric                             | Value                             |
+| ---------------------------------- | --------------------------------- |
+| Per-tenant message latency         | Same as single-tenant (~50-200ms) |
+| Cold start / wake from hibernation | <1 second (warm pool)             |
+| Memory per active tenant           | ~150-300 MB                       |
+| Memory per hibernated tenant       | ~0 MB (container stopped)         |
 
 **At 500 tenants (70% idle at any time):**
+
 - Active containers: ~150
 - Warm pool: 10-20 standby containers
 - Total RAM: ~30-60 GB
@@ -175,26 +177,26 @@ Designed for 500+ tenants with resource efficiency:
 
 ### Resource Tiers
 
-| Plan | CPU | Memory | Hibernation |
-|------|-----|--------|-------------|
-| Free | 250m (burst 500m) | 128Mi (limit 256Mi) | After 30 min idle |
-| Starter | 500m (burst 1000m) | 256Mi (limit 512Mi) | After 2 hours idle |
-| Pro | 1000m (burst 2000m) | 512Mi (limit 1Gi) | After 4 hours idle |
-| Enterprise | 2000m (burst 4000m) | 2Gi (limit 4Gi) | Never (always active) |
+| Plan       | CPU                 | Memory              | Hibernation           |
+| ---------- | ------------------- | ------------------- | --------------------- |
+| Free       | 250m (burst 500m)   | 128Mi (limit 256Mi) | After 30 min idle     |
+| Starter    | 500m (burst 1000m)  | 256Mi (limit 512Mi) | After 2 hours idle    |
+| Pro        | 1000m (burst 2000m) | 512Mi (limit 1Gi)   | After 4 hours idle    |
+| Enterprise | 2000m (burst 4000m) | 2Gi (limit 4Gi)     | Never (always active) |
 
 ---
 
 ## Technology Stack
 
-| Component | Technology |
-|-----------|------------|
-| Runtime | Node.js 22+ / TypeScript (ESM) |
-| Gateway | OpenClaw (unmodified upstream) |
-| Control Plane DB | PostgreSQL |
-| Container Orchestration | Kubernetes (primary), Docker (dev/fallback) |
-| Billing | Provider-agnostic (Stripe, Paddle, LemonSqueezy) |
-| Ingress | nginx-ingress / Traefik |
-| Package Manager | pnpm |
+| Component               | Technology                                       |
+| ----------------------- | ------------------------------------------------ |
+| Runtime                 | Node.js 22+ / TypeScript (ESM)                   |
+| Gateway                 | OpenClaw (unmodified upstream)                   |
+| Control Plane DB        | PostgreSQL                                       |
+| Container Orchestration | Kubernetes (primary), Docker (dev/fallback)      |
+| Billing                 | Provider-agnostic (Stripe, Paddle, LemonSqueezy) |
+| Ingress                 | nginx-ingress / Traefik                          |
+| Package Manager         | pnpm                                             |
 
 ---
 
@@ -241,6 +243,7 @@ openclaw control-plane tenant create \
 ### Production Deployment
 
 See `deploy/kubernetes/` for production Kubernetes manifests including:
+
 - Control plane Deployment + Service
 - PostgreSQL StatefulSet (or use managed DB)
 - Per-tenant resource templates
@@ -254,12 +257,14 @@ See `deploy/kubernetes/` for production Kubernetes manifests including:
 This fork tracks the `main` branch of [`openclaw/openclaw`](https://github.com/openclaw/openclaw).
 
 **Sync strategy:**
+
 - All multi-tenancy code lives in new modules (`src/tenants/`, `src/control-plane/`, `src/billing/`, `deploy/`)
 - No existing OpenClaw gateway files are modified
 - Upstream merges are expected to be conflict-free
 - Periodic sync: `git fetch upstream && git merge upstream/main`
 
 **Upstream remote:**
+
 ```bash
 git remote add upstream https://github.com/openclaw/openclaw.git
 ```
@@ -270,46 +275,46 @@ git remote add upstream https://github.com/openclaw/openclaw.git
 
 ### Admin Endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/api/v1/tenants` | Create tenant + trigger provisioning |
-| `GET` | `/api/v1/tenants` | List tenants (paginated) |
-| `GET` | `/api/v1/tenants/:id` | Get tenant details |
-| `PATCH` | `/api/v1/tenants/:id` | Update tenant config/plan |
-| `POST` | `/api/v1/tenants/:id/suspend` | Suspend tenant |
-| `POST` | `/api/v1/tenants/:id/resume` | Resume tenant |
-| `DELETE` | `/api/v1/tenants/:id` | Decommission tenant |
+| Method   | Path                          | Description                          |
+| -------- | ----------------------------- | ------------------------------------ |
+| `POST`   | `/api/v1/tenants`             | Create tenant + trigger provisioning |
+| `GET`    | `/api/v1/tenants`             | List tenants (paginated)             |
+| `GET`    | `/api/v1/tenants/:id`         | Get tenant details                   |
+| `PATCH`  | `/api/v1/tenants/:id`         | Update tenant config/plan            |
+| `POST`   | `/api/v1/tenants/:id/suspend` | Suspend tenant                       |
+| `POST`   | `/api/v1/tenants/:id/resume`  | Resume tenant                        |
+| `DELETE` | `/api/v1/tenants/:id`         | Decommission tenant                  |
 
 ### Tenant Self-Service Endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/v1/tenant/usage` | Current usage summary |
-| `GET` | `/api/v1/tenant/billing` | Billing status + invoices |
-| `POST` | `/api/v1/tenant/credentials` | Upload BYOK API keys |
-| `DELETE` | `/api/v1/tenant/credentials/:id` | Remove a BYOK key |
-| `GET` | `/api/v1/tenant/gateway/status` | Gateway health status |
+| Method   | Path                             | Description               |
+| -------- | -------------------------------- | ------------------------- |
+| `GET`    | `/api/v1/tenant/usage`           | Current usage summary     |
+| `GET`    | `/api/v1/tenant/billing`         | Billing status + invoices |
+| `POST`   | `/api/v1/tenant/credentials`     | Upload BYOK API keys      |
+| `DELETE` | `/api/v1/tenant/credentials/:id` | Remove a BYOK key         |
+| `GET`    | `/api/v1/tenant/gateway/status`  | Gateway health status     |
 
 ### Webhooks
 
-| Method | Path | Description |
-|--------|------|-------------|
+| Method | Path                       | Description                                   |
+| ------ | -------------------------- | --------------------------------------------- |
 | `POST` | `/api/v1/webhooks/billing` | Payment provider webhook (signature-verified) |
 
 ---
 
 ## Implementation Phases
 
-| Phase | Scope | Status |
-|-------|-------|--------|
-| 0. Setup | Fork, dependencies, Dockerfile, K8s manifests | Planned |
-| 1. Foundation | Tenant types, DB schema, tenant store, config generator | Planned |
-| 2. Orchestration | K8s container runtime, orchestrator, health monitor | Planned |
-| 3. Billing | Provider interface, Stripe impl, webhooks, quotas | Planned |
-| 4. Usage & Credentials | Usage collector, BYOK API, hybrid mode, metering | Planned |
-| 5. API & CLI | Control plane server, REST endpoints, CLI commands | Planned |
-| 6. Scaling | Hibernation, warm pool, resource tiering | Planned |
-| 7. Polish | Audit logging, monitoring, load testing, docs | Planned |
+| Phase                  | Scope                                                   | Status  |
+| ---------------------- | ------------------------------------------------------- | ------- |
+| 0. Setup               | Fork, dependencies, Dockerfile, K8s manifests           | Planned |
+| 1. Foundation          | Tenant types, DB schema, tenant store, config generator | Planned |
+| 2. Orchestration       | K8s container runtime, orchestrator, health monitor     | Planned |
+| 3. Billing             | Provider interface, Stripe impl, webhooks, quotas       | Planned |
+| 4. Usage & Credentials | Usage collector, BYOK API, hybrid mode, metering        | Planned |
+| 5. API & CLI           | Control plane server, REST endpoints, CLI commands      | Planned |
+| 6. Scaling             | Hibernation, warm pool, resource tiering                | Planned |
+| 7. Polish              | Audit logging, monitoring, load testing, docs           | Planned |
 
 ---
 

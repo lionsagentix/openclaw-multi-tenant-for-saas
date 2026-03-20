@@ -198,7 +198,8 @@ export function createDockerRuntime(config: DockerRuntimeConfig): ContainerRunti
           running: state === "running",
           ready,
           state,
-          restartCount: dockerState?.RestartCount ?? 0,
+          // RestartCount is present in Docker API but missing from @types/dockerode.
+          restartCount: ((dockerState as Record<string, unknown>)?.RestartCount as number) ?? 0,
           startedAt: dockerState?.StartedAt ?? undefined,
           message: dockerState?.Error || undefined,
         };
