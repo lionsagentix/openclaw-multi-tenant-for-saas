@@ -311,6 +311,15 @@ const entries: SubCliEntry[] = [
       mod.registerCompletionCli(program);
     },
   },
+  {
+    name: "control-plane",
+    description: "Multi-tenant control plane management",
+    hasSubcommands: true,
+    register: async (program) => {
+      const mod = await import("../../control-plane/cli/control-plane-cli.js");
+      mod.registerControlPlaneCli(program);
+    },
+  },
 ];
 
 export function getSubCliEntries(): ReadonlyArray<SubCliDescriptor> {

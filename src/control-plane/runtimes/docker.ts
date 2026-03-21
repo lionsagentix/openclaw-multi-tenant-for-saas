@@ -233,20 +233,45 @@ export function createDockerRuntime(config: DockerRuntimeConfig): ContainerRunti
     async writeGatewayConfig(containerId: string, configJson: string): Promise<void> {
       // Write config by executing a command inside the container.
       // The config file is at /home/node/.openclaw/openclaw.json.
+      await runtime.writeGatewayFile(containerId, "/home/node/.openclaw/openclaw.json", configJson);
+    },
+
+    async writeGatewayFile(containerId: string, filePath: string, content: string): Promise<void> {
+      assertSafeFilePath(filePath);
       const container = docker.getContainer(containerId);
+      const dir = filePath.substring(0, filePath.lastIndexOf("/"));
       const exec = await container.exec({
-        Cmd: [
-          "sh",
-          "-c",
-          `mkdir -p /home/node/.openclaw && cat > /home/node/.openclaw/openclaw.json`,
-        ],
+        Cmd: ["sh", "-c", `mkdir -p '${dir}' && cat > '${filePath}'`],
         AttachStdin: true,
         AttachStdout: true,
         AttachStderr: true,
       });
       const stream = await exec.start({ hijack: true, stdin: true });
-      stream.write(configJson);
+      stream.write(content);
       stream.end();
+    },
+
+    async readGatewayFile(containerId: string, filePath: string): Promise<string | null> {
+      try {
+        const container = docker.getContainer(containerId);
+        const exec = await container.exec({
+          Cmd: ["cat", filePath],
+          AttachStdout: true,
+          AttachStderr: true,
+        });
+        const stream = await exec.start({ hijack: true });
+        return await new Promise<string | null>((resolve) => {
+          const chunks: Buffer[] = [];
+          stream.on("data", (chunk: Buffer) => chunks.push(chunk));
+          stream.on("end", () => {
+            const output = Buffer.concat(chunks).toString("utf-8");
+            resolve(output || null);
+          });
+          stream.on("error", () => resolve(null));
+        });
+      } catch {
+        return null;
+      }
     },
 
     async deleteGatewayVolume(tenantSlug: string): Promise<void> {
@@ -260,6 +285,22 @@ export function createDockerRuntime(config: DockerRuntimeConfig): ContainerRunti
   };
 
   return runtime;
+}
+
+// ── Path Safety ─────────────────────────────────────────────────
+
+/**
+ * Validate that a file path is safe for shell interpolation inside containers.
+ * Must be an absolute path containing only safe characters.
+ */
+function assertSafeFilePath(filePath: string): void {
+  if (!filePath.startsWith("/")) {
+    throw new Error(`File path must be absolute: ${filePath}`);
+  }
+  // Allow alphanumeric, slashes, dashes, underscores, dots.
+  if (!/^[a-zA-Z0-9/._-]+$/.test(filePath)) {
+    throw new Error(`File path contains unsafe characters: ${filePath}`);
+  }
 }
 
 // ── K8s format parsers ─────────────────────────────────────────

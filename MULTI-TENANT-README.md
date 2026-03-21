@@ -305,16 +305,16 @@ git remote add upstream https://github.com/openclaw/openclaw.git
 
 ## Implementation Phases
 
-| Phase                  | Scope                                                   | Status  |
-| ---------------------- | ------------------------------------------------------- | ------- |
-| 0. Setup               | Fork, dependencies, Dockerfile, K8s manifests           | Planned |
-| 1. Foundation          | Tenant types, DB schema, tenant store, config generator | Planned |
-| 2. Orchestration       | K8s container runtime, orchestrator, health monitor     | Planned |
-| 3. Billing             | Provider interface, Stripe impl, webhooks, quotas       | Planned |
-| 4. Usage & Credentials | Usage collector, BYOK API, hybrid mode, metering        | Planned |
-| 5. API & CLI           | Control plane server, REST endpoints, CLI commands      | Planned |
-| 6. Scaling             | Hibernation, warm pool, resource tiering                | Planned |
-| 7. Polish              | Audit logging, monitoring, load testing, docs           | Planned |
+| Phase                  | Scope                                                   | Status      |
+| ---------------------- | ------------------------------------------------------- | ----------- |
+| 0. Setup               | Fork, dependencies, Dockerfile, K8s manifests           | ✅ Complete |
+| 1. Foundation          | Tenant types, DB schema, tenant store, config generator | ✅ Complete |
+| 2. Orchestration       | K8s container runtime, orchestrator, health monitor     | ✅ Complete |
+| 3. Billing             | Provider interface, Stripe impl, webhooks, quotas       | ✅ Complete |
+| 4. Usage & Credentials | Usage collector, BYOK API, hybrid mode, metering        | ✅ Complete |
+| 5. API & CLI           | Control plane server, REST endpoints, CLI commands      | ✅ Complete |
+| 6. Scaling             | Hibernation, warm pool, resource tiering                | Planned     |
+| 7. Polish              | Audit logging, monitoring, load testing, docs           | Planned     |
 
 ---
 

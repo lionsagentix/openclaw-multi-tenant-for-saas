@@ -113,6 +113,19 @@ export type ContainerRuntime = {
   writeGatewayConfig(containerId: string, configJson: string): Promise<void>;
 
   /**
+   * Write an arbitrary file to a gateway's data volume.
+   * Used by credential sync to update auth-profiles.json.
+   */
+  writeGatewayFile(containerId: string, filePath: string, content: string): Promise<void>;
+
+  /**
+   * Read a file from a gateway's data volume.
+   * Returns file content as a string, or null if not found.
+   * Used by the usage collector to read auth-profiles.json usageStats.
+   */
+  readGatewayFile(containerId: string, filePath: string): Promise<string | null>;
+
+  /**
    * Delete the persistent data volume for a tenant.
    * Called during tenant deprovisioning after backup.
    */

@@ -211,6 +211,55 @@ export async function listTenants(params: TenantListParams = {}): Promise<Tenant
   };
 }
 
+// ── Tenant Updates ──────────────────────────────────────────────
+
+/** Update a tenant's mutable fields. Only provided fields are updated. */
+export async function updateTenant(
+  tenantId: TenantId,
+  updates: Partial<
+    Pick<Tenant, "displayName" | "plan" | "credentialMode" | "contactEmail" | "metadata">
+  >,
+): Promise<Tenant | null> {
+  const setClauses: string[] = [];
+  const values: unknown[] = [];
+  let paramIndex = 1;
+
+  if (updates.displayName !== undefined) {
+    setClauses.push(`display_name = $${paramIndex++}`);
+    values.push(updates.displayName);
+  }
+  if (updates.plan !== undefined) {
+    setClauses.push(`plan = $${paramIndex++}`);
+    values.push(updates.plan);
+  }
+  if (updates.credentialMode !== undefined) {
+    setClauses.push(`credential_mode = $${paramIndex++}`);
+    values.push(updates.credentialMode);
+  }
+  if (updates.contactEmail !== undefined) {
+    setClauses.push(`contact_email = $${paramIndex++}`);
+    values.push(updates.contactEmail);
+  }
+  if (updates.metadata !== undefined) {
+    setClauses.push(`metadata = $${paramIndex++}`);
+    values.push(JSON.stringify(updates.metadata));
+  }
+
+  if (setClauses.length === 0) {
+    return getTenant(tenantId);
+  }
+
+  setClauses.push(`updated_at = NOW()`);
+  values.push(tenantId);
+
+  const db = getDb();
+  const result = await db.query(
+    `UPDATE tenants SET ${setClauses.join(", ")} WHERE id = $${paramIndex} AND deleted_at IS NULL RETURNING *`,
+    values,
+  );
+  return result.rows.length > 0 ? rowToTenant(result.rows[0]) : null;
+}
+
 // ── Status Transitions ─────────────────────────────────────────
 
 /** Update a tenant's status. */

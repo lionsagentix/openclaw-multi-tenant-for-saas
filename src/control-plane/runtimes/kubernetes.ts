@@ -12,6 +12,7 @@
  * - Secret (gateway token, platform AI keys)
  */
 
+import { Writable } from "node:stream";
 import * as k8s from "@kubernetes/client-node";
 import type {
   ContainerInfo,
@@ -428,28 +429,88 @@ export function createKubernetesRuntime(config: KubernetesRuntimeConfig): Contai
     },
 
     async writeGatewayConfig(containerId: string, configJson: string): Promise<void> {
+      await runtime.writeGatewayFile(containerId, "/home/node/.openclaw/openclaw.json", configJson);
+    },
+
+    async writeGatewayFile(containerId: string, filePath: string, content: string): Promise<void> {
+      assertSafeFilePath(filePath);
       const slug = containerId.replace(/^openclaw-gw-/, "");
-      const configMapName = `openclaw-tenant-${slug}-config`;
+
+      // Find the pod for this deployment.
+      const pods = await coreApi.listNamespacedPod({
+        namespace,
+        labelSelector: `app=openclaw-gateway,tenant-slug=${slug}`,
+      });
+
+      if (!pods.items || pods.items.length === 0) {
+        throw new Error(`No pods found for gateway ${containerId}`);
+      }
+
+      const podName = pods.items[0].metadata?.name;
+      if (!podName) {
+        throw new Error(`Pod name not available for gateway ${containerId}`);
+      }
+
+      // Write file via base64-encoded content to avoid stdin piping issues.
+      // Encode content as base64, then decode inside the container.
+      const b64 = Buffer.from(content, "utf-8").toString("base64");
+      const dir = filePath.substring(0, filePath.lastIndexOf("/"));
+      const k8sExec = new k8s.Exec(kc);
+      await new Promise<void>((resolve, reject) => {
+        k8sExec
+          .exec(
+            namespace,
+            podName,
+            "gateway",
+            ["sh", "-c", `mkdir -p '${dir}' && echo '${b64}' | base64 -d > '${filePath}'`],
+            null, // stdout
+            null, // stderr
+            null, // stdin
+            false, // tty
+          )
+          .then(() => resolve())
+          .catch(reject);
+      });
+    },
+
+    async readGatewayFile(containerId: string, filePath: string): Promise<string | null> {
+      const slug = containerId.replace(/^openclaw-gw-/, "");
 
       try {
-        // Try to update existing ConfigMap.
-        await coreApi.replaceNamespacedConfigMap({
-          name: configMapName,
+        const pods = await coreApi.listNamespacedPod({
           namespace,
-          body: {
-            metadata: { name: configMapName, namespace },
-            data: { "openclaw.json": configJson },
-          },
+          labelSelector: `app=openclaw-gateway,tenant-slug=${slug}`,
+        });
+
+        if (!pods.items || pods.items.length === 0) {
+          return null;
+        }
+
+        const podName = pods.items[0].metadata?.name;
+        if (!podName) {
+          return null;
+        }
+
+        // Read file via kubectl exec cat.
+        const k8sExec = new k8s.Exec(kc);
+        return await new Promise<string | null>((resolve) => {
+          const chunks: Buffer[] = [];
+          const stdout = new Writable({
+            write(chunk: Buffer | string, _encoding, callback) {
+              chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+              callback();
+            },
+          });
+          k8sExec
+            .exec(namespace, podName, "gateway", ["cat", filePath], stdout, null, null, false)
+            .then(() => {
+              const output = Buffer.concat(chunks).toString("utf-8");
+              resolve(output || null);
+            })
+            .catch(() => resolve(null));
         });
       } catch {
-        // Create if not found.
-        await coreApi.createNamespacedConfigMap({
-          namespace,
-          body: {
-            metadata: { name: configMapName, namespace },
-            data: { "openclaw.json": configJson },
-          },
-        });
+        return null;
       }
     },
 
@@ -466,4 +527,17 @@ export function createKubernetesRuntime(config: KubernetesRuntimeConfig): Contai
   };
 
   return runtime;
+}
+
+/**
+ * Validate that a file path is safe for shell interpolation inside containers.
+ * Must be an absolute path containing only safe characters.
+ */
+function assertSafeFilePath(filePath: string): void {
+  if (!filePath.startsWith("/")) {
+    throw new Error(`File path must be absolute: ${filePath}`);
+  }
+  if (!/^[a-zA-Z0-9/._-]+$/.test(filePath)) {
+    throw new Error(`File path contains unsafe characters: ${filePath}`);
+  }
 }
